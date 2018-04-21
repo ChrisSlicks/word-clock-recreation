@@ -1,4 +1,3 @@
-#include <Adafruit_IS31FL3731.h>
 #include <Adafruit_GFX.h>
 #include <Wire.h>         //http://arduino.cc/en/Reference/Wire (included with Arduino IDE)
 #include "RTClib.h"
@@ -263,7 +262,7 @@ void applyMask() {
             case 1:
               // matrix.drawPixel(col, row, Wheel(((col * 256 / matrix.numPixels()) + j) & 255));
               // word_mode color set
-                matrix.drawPixel(col, row, 255);
+               matrix.drawPixel(col, row, matrix.Color(dimred, dimgreen, dimblue));
                break;
          }
       }
@@ -272,7 +271,7 @@ void applyMask() {
    }
 
 
-   matrix.displayFrame(0); // show it!
+   matrix.show(); // show it!
 }
 
 void readModeButton() {
@@ -360,17 +359,19 @@ void displayDigits() {
     units = mytimemin % 10;
     tens  = mytimemin / 10;
     //digit_mode color, minutes
+    color = matrix.Color(minred,mingreen,minblue);
   } else {
     units = mytimehr % 10;
     tens  = mytimehr / 10;
     //digit_mode color, hours
+    color = matrix.Color(hourred,hourgreen,hourblue);
   }
   matrix.clear();
  
   draw(0, 2, charmap[tens],  color);
   draw(6, 2, charmap[units], color);
  
-  matrix.displayFrame(0); // show it!
+  matrix.show();
 }
 
 void displayDate() {
@@ -381,17 +382,19 @@ void displayDate() {
     units = mytimeday % 10;
     tens  = mytimeday / 10;
     //digit_mode color, minutes
+    color = matrix.Color(dayred,daygreen,dayblue);
   } else {
     units = mytimemonth % 10;
     tens  = mytimemonth / 10;
     //digit_mode color, hours
+    color = matrix.Color(monthred,monthgreen,monthblue);
   }
   matrix.clear();
  
   draw(0, 2, charmap[tens],  color);
   draw(6, 2, charmap[units], color);
  
-  matrix.displayFrame(0); // show it!
+  matrix.show();
 }
 
 void displayWords() {
