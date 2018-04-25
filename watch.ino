@@ -1,25 +1,23 @@
 #include <Adafruit_IS31FL3731.h>
 #include <Adafruit_GFX.h>
 #include <Wire.h>         //http://arduino.cc/en/Reference/Wire (included with Arduino IDE)
-#include "RTClib.h"
 #include <TimeLib.h>
 #define PIN 6
 
 //IF CLOCK TIME IS WRONG: RUN FILE->EXAMPLE->DS1307RTC->SET TIME
 
-RTC_DS1307 rtc;
 
-void digitalClockDisplay() {
+void digitalClockDisplay(time_t mynow) {
   // digital clock display of the time
-  Serial.print(hour());
-  printDigits(minute());
-  printDigits(second());
+  Serial.print(hour(mynow));
+  printDigits(minute(mynow));
+  printDigits(second(mynow));
   Serial.print(" ");
-  Serial.print(day());
+  Serial.print(day(mynow));
   Serial.print(" ");
-  Serial.print(month());
+  Serial.print(month(mynow));
   Serial.print(" ");
-  Serial.print(year()); 
+  Serial.print(year(mynow));
   Serial.println(); 
 }
 
@@ -151,6 +149,7 @@ uint16_t mask[11];
 #define phraseOCLOCK     mask[8]  |= 0x003F
 
 typedef uint8_t Character[7];
+void draw(uint8_t x, uint8_t y, const Character& c, uint16_t color);
 const Character charmap[] = {
   {
     0b01110,
@@ -268,28 +267,27 @@ void flashWords(void);
 void pickAPixel(uint8_t x, uint8_t y);
 
 void setup() {
-  matrix.begin();
-   Serial.begin(9600);  //Begin serial communcation (for photoresistor to display on serial monitor)
-   
-   pinMode(buttonSet, INPUT_PULLUP);
-   pinMode(buttonUp, INPUT_PULLUP);
-   pinMode(buttonDown, INPUT_PULLUP);
-   pinMode(photoResistor, INPUT);
-  
-
-// set the Time library to use Teensy 3.0's RTC to keep time
-  setSyncProvider(getTeensy3Time);
-
   Serial.begin(115200);
   while (!Serial);  // Wait for Arduino Serial Monitor to open
   delay(100);
+  Serial.println("Hi!");
+
+  matrix.begin();
+  // set the Time library to use Teensy 3.0's RTC to keep time
+  setSyncProvider(getTeensy3Time);
+   
+  pinMode(buttonSet, INPUT_PULLUP);
+  pinMode(buttonUp, INPUT_PULLUP);
+  pinMode(buttonDown, INPUT_PULLUP);
+  pinMode(photoResistor, INPUT);
+
   if (timeStatus()!= timeSet) {
     Serial.println("Unable to sync with the RTC");
   } else {
     Serial.println("RTC has set the system time");
-    }
-  
+  }
 }
+
 void applyMask() {
 
    for (byte row = 0; row < 11; row++) 
@@ -343,15 +341,17 @@ void loop() {
       setTime(t);
     }
   }
-  digitalClockDisplay();  
+  
+  time_t mynow = now();
+  mytimemonth=month(mynow);
+  mytimeday=day(mynow);
+  mytimehr=hour(mynow);
+  mytimemin=minute(mynow);
+  mytimesec=second(mynow);
+  digitalClockDisplay(mynow);
+
   delay(1000);
   
-    time_t mynow = now();
-    mytimemonth=month(mynow);
-    mytimeday=day(mynow);
-    mytimehr=hour(mynow);
-    mytimemin=minute(mynow);
-    mytimesec=second(mynow);
 //////////////////////////////////////////PHOTORESISTOR/////////////////////////////////////////////
     //Photoresistor settings
     photoRead = analogRead(photoResistor);  
@@ -394,16 +394,15 @@ void loop() {
   else if (mode == DATE_MODE)
     displayDate();
     
-}
-
-
-
-  }
 };
+
+//void displayWords();
+//void displayDate();
+//void displayDigits();
 
 void displayDigits() {
   uint8_t units, tens;
-  uint16_t color;
+  uint16_t color = 255;
    
   if (mytimesec/2 % 2) {
     units = mytimemin % 10;
@@ -422,9 +421,17 @@ void displayDigits() {
   matrix.displayFrame(0); // show it!
 }
 
+
+void draw(uint8_t x, uint8_t y, const Character& c, uint16_t color) {
+  for (int i = 0; i < 7; i++) for (int j = 0; j < 5; j++) {
+    if (bitRead(c[i], j)) matrix.drawPixel(x+4-j, y+i, color);
+  }
+};
+
+
 void displayDate() {
   uint8_t units, tens;
-  uint16_t color;
+  uint16_t color = 255;
    
   if (mytimesec/2 % 2) {
     units = mytimeday % 10;
@@ -442,6 +449,7 @@ void displayDate() {
  
   matrix.displayFrame(0); // show it!
 }
+
 
 void displayWords() {
   //Always on
@@ -778,5 +786,5 @@ void displayWords() {
       hourTWELVE;
     }
   }
-  applyMask(); 
+  applyMask();
 }
