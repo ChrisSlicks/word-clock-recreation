@@ -1,13 +1,57 @@
+#include <Adafruit_IS31FL3731.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_NeoMatrix.h>
-#include <Adafruit_NeoPixel.h>
 #include <Wire.h>         //http://arduino.cc/en/Reference/Wire (included with Arduino IDE)
 #include "RTClib.h"
+#include <TimeLib.h>
 #define PIN 6
 
 //IF CLOCK TIME IS WRONG: RUN FILE->EXAMPLE->DS1307RTC->SET TIME
 
-RTC_DS3231 rtc;
+RTC_DS1307 rtc;
+
+void digitalClockDisplay() {
+  // digital clock display of the time
+  Serial.print(hour());
+  printDigits(minute());
+  printDigits(second());
+  Serial.print(" ");
+  Serial.print(day());
+  Serial.print(" ");
+  Serial.print(month());
+  Serial.print(" ");
+  Serial.print(year()); 
+  Serial.println(); 
+}
+
+time_t getTeensy3Time()
+{
+  return Teensy3Clock.get();
+}
+
+/*  code to process time sync messages from the serial port   */
+#define TIME_HEADER  "T"   // Header tag for serial time sync message
+
+unsigned long processSyncMessage() {
+  unsigned long pctime = 0L;
+  const unsigned long DEFAULT_TIME = 1357041600; // Jan 1 2013 
+
+  if(Serial.find(TIME_HEADER)) {
+     pctime = Serial.parseInt();
+     return pctime;
+     if( pctime < DEFAULT_TIME) { // check the value is a valid time (greater than Jan 1 2013)
+       pctime = 0L; // return 0 to indicate that the time is not valid
+     }
+  }
+  return pctime;
+}
+
+void printDigits(int digits){
+  // utility function for digital clock display: prints preceding colon and leading 0
+  Serial.print(":");
+  if(digits < 10)
+    Serial.print('0');
+  Serial.print(digits);
+}
 
 // matrix of 11 - 16 bit ints (shorts) for displaying the leds
 uint16_t mask[11];
@@ -80,7 +124,6 @@ uint16_t mask[11];
 #define WORD_MODE 0
 #define DIGIT_MODE 1
 #define DATE_MODE 2
-#define BDAY_MODE 3
 #define MAX_MODE 4
 
 #define phraseIT         mask[0]  |= 0xC000
@@ -225,31 +268,28 @@ void flashWords(void);
 void pickAPixel(uint8_t x, uint8_t y);
 
 void setup() {
-   matrix.begin();
+  matrix.begin();
    Serial.begin(9600);  //Begin serial communcation (for photoresistor to display on serial monitor)
    
    pinMode(buttonSet, INPUT_PULLUP);
    pinMode(buttonUp, INPUT_PULLUP);
    pinMode(buttonDown, INPUT_PULLUP);
    pinMode(photoResistor, INPUT);
+  
 
+// set the Time library to use Teensy 3.0's RTC to keep time
+  setSyncProvider(getTeensy3Time);
 
-   // This info pulled from RTClib.h
- if (! rtc.begin()) {
-    Serial.println("Couldn't find RTC"); //program LEDs to show "NO CLOCK"
-    while (1);
-  }
-
-  if (rtc.lostPower()) {
-    Serial.println("RTC lost power, lets set the time!"); //program LEDs to show "SET CLOCK"
-    // following line sets the RTC to the date & time this sketch was compiled
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    // This line sets the RTC with an explicit date & time, for example to set
-    // January 21, 2014 at 3am you would call:
-    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
-  }
+  Serial.begin(115200);
+  while (!Serial);  // Wait for Arduino Serial Monitor to open
+  delay(100);
+  if (timeStatus()!= timeSet) {
+    Serial.println("Unable to sync with the RTC");
+  } else {
+    Serial.println("RTC has set the system time");
+    }
+  
 }
-
 void applyMask() {
 
    for (byte row = 0; row < 11; row++) 
@@ -265,7 +305,7 @@ void applyMask() {
             case 1:
               // matrix.drawPixel(col, row, Wheel(((col * 256 / matrix.numPixels()) + j) & 255));
               // word_mode color set
-               matrix.drawPixel(col, row, matrix.Color(dimred, dimgreen, dimblue));
+                matrix.drawPixel(col, row, 255);
                break;
          }
       }
@@ -274,7 +314,7 @@ void applyMask() {
    }
 
 
-   matrix.show(); // show it!
+   matrix.displayFrame(0); // show it!
 }
 
 void readModeButton() {
@@ -294,15 +334,24 @@ void readModeButton() {
   lastState = currentState;
 }
 
-
 void loop() {
+
+  if (Serial.available()) {
+    time_t t = processSyncMessage();
+    if (t != 0) {
+      Teensy3Clock.set(t); // set the RTC
+      setTime(t);
+    }
+  }
+  digitalClockDisplay();  
+  delay(1000);
   
-    DateTime now = rtc.now();
-    mytimemonth=now.month();
-    mytimeday=now.day();
-    mytimehr=now.hour();
-    mytimemin=now.minute();
-    mytimesec=now.second();
+    time_t mynow = now();
+    mytimemonth=month(mynow);
+    mytimeday=day(mynow);
+    mytimehr=hour(mynow);
+    mytimemin=minute(mynow);
+    mytimesec=second(mynow);
 //////////////////////////////////////////PHOTORESISTOR/////////////////////////////////////////////
     //Photoresistor settings
     photoRead = analogRead(photoResistor);  
@@ -344,14 +393,10 @@ void loop() {
     displayDigits();
   else if (mode == DATE_MODE)
     displayDate();
-  else if (mode == BDAY_MODE)
-    displayBday();
     
 }
 
-void draw(uint8_t x, uint8_t y, const Character &c, uint16_t color) {
-  for (int i = 0; i < 7; i++) for (int j = 0; j < 5; j++) {
-    if (bitRead(c[i], j)) matrix.drawPixel(x+4-j, y+i, color);
+
 
   }
 };
@@ -364,19 +409,17 @@ void displayDigits() {
     units = mytimemin % 10;
     tens  = mytimemin / 10;
     //digit_mode color, minutes
-    color = matrix.Color(minred,mingreen,minblue);
   } else {
     units = mytimehr % 10;
     tens  = mytimehr / 10;
     //digit_mode color, hours
-    color = matrix.Color(hourred,hourgreen,hourblue);
   }
   matrix.clear();
  
   draw(0, 2, charmap[tens],  color);
   draw(6, 2, charmap[units], color);
  
-  matrix.show();
+  matrix.displayFrame(0); // show it!
 }
 
 void displayDate() {
@@ -387,26 +430,17 @@ void displayDate() {
     units = mytimeday % 10;
     tens  = mytimeday / 10;
     //digit_mode color, minutes
-    color = matrix.Color(dayred,daygreen,dayblue);
   } else {
     units = mytimemonth % 10;
     tens  = mytimemonth / 10;
     //digit_mode color, hours
-    color = matrix.Color(monthred,monthgreen,monthblue);
   }
   matrix.clear();
  
   draw(0, 2, charmap[tens],  color);
   draw(6, 2, charmap[units], color);
  
-  matrix.show();
-}
-
-void displayBday() {
-  //Always on
-   phraseHAPPY;
-   phraseBIRTHDAY;
-     applyMask(); 
+  matrix.displayFrame(0); // show it!
 }
 
 void displayWords() {
@@ -746,4 +780,3 @@ void displayWords() {
   }
   applyMask(); 
 }
-
